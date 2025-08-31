@@ -1,0 +1,53 @@
+Initialising App:
+@override
+  void initState() {
+    super.initState();
+    getToDo();
+  }
+Initialise all variables and data structures before running the app on the screen
+variables could be stored app settings....
+
+
+
+
+
+TextField Input:
+final inputController = TextEditingController(); create a controller when creating the class where Scaffold code written
+inside TextField(controller:yourinitcontroller)
+necesary code//// self invokes
+ @override
+  void dispose() {
+    inputController.dispose();
+    super.dispose();
+  }///
+accessing controller.text to get user input string
+default value of controller.text is "" not null if user doesnt enter shi.. can check for "" using .isNotEmpty()
+controller.clear() to clear the TextField
+
+*Async.....Await*:
+onPressed: () async {
+              await _showModalBottomSheet(context);
+            }, //...Caller....
+async is used with function definition and await is used inside function body where we are expecting to return a user entered value to the program
+user can take lot of time to enter the value and submit so async await make sure the execution of the program as a whole doesnt pause and wait for user input
+
+Using async await functions......//......Callee....
+use Future<datatype> fname async(await.....) declaration
+
+
+SharedPreferences......
+Future<void> getToDo() async { getter method to fetch all data 
+    final list = await SharedPreferences.getInstance();
+    setState(() {  getDataType() to get that specific key type stored in list variable
+      todoItems = list.getStringList("ToDo_Data") ?? [];//...??[] to handle null case where data couldnt be fetched
+    });// works on int, float, string, list 
+  }
+is Asynchronous function that fetches all key value data structures stored in system memory
+the list variable contains all the fetched data
+
+                           parameter passed from initState() to get data from memory and store it in global variable toDoList
+  Future<void> setToDo(List<String> toDoList) async {
+    final list = await SharedPreferences.getInstance();
+    await list.setStringList("ToDo_Data", toDoList);//stores data in key value pairs
+  }                              key         value
+
