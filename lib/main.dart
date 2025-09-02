@@ -1,117 +1,56 @@
-import 'package:first_app/app_bar.dart';
-import 'package:first_app/starred_page.dart';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
+import 'databse.dart';
 
 void main() {
-  runApp(const MyApp());
+  runApp(const ToDoApp());
 }
 
-class MyApp extends StatefulWidget {
-  const MyApp({super.key});
-  @override
-  State<MyApp> createState() => MyAppState();
-}
-
-class MyAppState extends State<MyApp> {
-  @override
-  void initState() {
-    super.initState();
-    gettheme();
-  }
-
-  Future<void> gettheme() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      themestate = prefs.getBool("theme") ?? true;
-      if (themestate == true) {
-        thememode = ThemeMode.dark;
-      } else {
-        thememode = ThemeMode.light;
-      }
-    });
-  }
-
-  ThemeMode thememode = ThemeMode.dark;
-  bool themestate = true;
-
-  Future<void> toggletheme() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      if (themestate == true) {
-        thememode = ThemeMode.light;
-        themestate = false;
-      } else {
-        thememode = ThemeMode.dark;
-        themestate = true;
-      }
-    });
-
-    await prefs.setBool("theme", themestate);
-  }
-
+class ToDoApp extends StatelessWidget {
+  const ToDoApp({super.key});
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-        debugShowCheckedModeBanner: false,
-        themeMode: thememode,
-        darkTheme: ThemeData.dark(useMaterial3: true),
-        theme: ThemeData.light(useMaterial3: true),
-        home: HomePage(
-          title: "What ToDo Today",
-          changetheme: toggletheme,
-          theme: thememode,
-        ));
+      darkTheme: ThemeData.dark(useMaterial3: true),
+      themeMode: ThemeMode.dark,
+      debugShowCheckedModeBanner: false,
+      home: const HomePage(
+        title: "ToDo",
+      ),
+    );
   }
 }
 
 class HomePage extends StatefulWidget {
-  const HomePage(
-      {super.key,
-      required this.title,
-      required this.changetheme,
-      required this.theme});
+  const HomePage({super.key, required this.title});
   final String title;
-  final VoidCallback changetheme;
-  final ThemeMode theme;
-
   @override
   State<HomePage> createState() => HomePageState();
 }
 
 class HomePageState extends State<HomePage> {
-  final inputController = TextEditingController();
-  @override
-  void dispose() {
-    inputController.dispose();
-    super.dispose();
-  }
-
-  List<String> todoitems = [];
-  List<String> starreditems = [];
-
+  List<String> categoryChips = [];
+  List<String> currentToDoList = [];
+  late String currentCategoryChip;
+  final textController = TextEditingController();
+  final DatabaseService databaseService = DatabaseService.instance;
   @override
   void initState() {
     super.initState();
-    getdata();
+    currentCategoryChip = databaseService.myTasksTable;
+    initialiseShit();
   }
 
-  Future<void> getdata() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      todoitems = prefs.getStringList("todo") ?? [];
-      starreditems = prefs.getStringList("starred") ?? [];
-    });
+  void initialiseShit() async {
+    currentToDoList = await databaseService.initMyTasksOnAppStart();
+    categoryChips = await databaseService.initCategoryChipsOnAppStart();
+    setState(() {});
   }
 
-  Future<void> setStarred(List<String> starredList) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList("starred", starredList);
-  }
-
-  Future<void> setTodo(List<String> todoList) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList("todo", todoList);
+  @override
+  void dispose() {
+    super.dispose();
+    textController.dispose();
   }
 
   Future<void> _showModalBottomSheet(BuildContext context) async {
@@ -120,112 +59,298 @@ class HomePageState extends State<HomePage> {
         isScrollControlled: true,
         builder: (BuildContext context) {
           return (Padding(
-            padding: EdgeInsets.only(
-              bottom: MediaQuery.of(context).viewInsets.bottom,
-            ),
-            child: SingleChildScrollView(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    TextField(
-                      controller: inputController,
-                      decoration: const InputDecoration(hintText: "New Task"),
-                    ),
-                    const SizedBox(
-                      //maybe for better bottom visuals instead of adding padding below TextField
-                      height: 10,
-                    ),
-                    FloatingActionButton(
-                        onPressed: () {
-                          Navigator.pop(context, inputController.text);
-                        },
-                        child: const Icon(Icons.check))
-                  ],
-                ),
+              padding: EdgeInsets.only(
+                //when the keyboard rises, the os reserves the bottom space for keyboard, the viewinsets.bottom helps flutter pad the bottom of widget against the size of keyboard when it rises up
+                bottom: MediaQuery.of(context).viewInsets.bottom,
               ),
-            ),
-          ));
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      TextField(
+                        controller: textController,
+                        decoration: const InputDecoration(hintText: "New Task"),
+                      ),
+                      SizedBox(
+                          height: MediaQuery.of(context).size.height * 0.02),
+                      Align(
+                          alignment: Alignment.bottomRight,
+                          child: TextButton(
+                              onPressed: () {
+                                Navigator.pop(context, textController.text);
+                              },
+                              child: const Text("Save")))
+                    ],
+                  ),
+                ),
+              )));
         });
-
-    if (text != null && text.isNotEmpty) {
+    textController.clear();
+    if (text != null && text != "") {
       setState(() {
-        todoitems.add(text);
+        currentToDoList.add(text);
       });
-      await setTodo(todoitems);
+      await databaseService.saveTasks(currentCategoryChip, text);
     }
-    inputController.clear();
   }
 
-  Future<void> _navigatetostarred() async {
-    await Navigator.push(
-        context,
-        MaterialPageRoute(
-            builder: (context) => Starred(
-                  theme: widget.theme,
-                  changetheme: widget.changetheme,
-                  todoitems: todoitems,
-                  starreditems: starreditems,
-                  setStarred: setStarred,
-                  setToDo: setTodo,
-                )));
-    setState(() {});
+  Future<void> alertDialog(BuildContext context) async {
+    TextEditingController textcontroller = TextEditingController();
+    await showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+              content: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Row(
+                children: [
+                  const Expanded(
+                    child: Align(
+                      alignment: Alignment.topLeft,
+                      child: Text("Create New List"),
+                    ),
+                  ),
+                  TextButton(
+                      onPressed: () async {
+                        if (categoryChips.contains(textcontroller.text)) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content: Text('List Already Exists')),
+                          );
+                        } else if (textcontroller.text != "") {
+                          setState(() {
+                            categoryChips.add(textcontroller.text);
+                            currentCategoryChip = textcontroller.text;
+                            currentToDoList = [];
+                          });
+                          await databaseService
+                              .createCategory(currentCategoryChip);
+                        }
+                        if (!context.mounted) return;
+                        Navigator.of(context).pop();
+                      },
+                      child: const Text("Done"))
+                ],
+              ),
+              TextField(
+                controller: textcontroller,
+                decoration: const InputDecoration(hintText: "Enter List Title"),
+              ),
+            ],
+          ));
+        });
+    textcontroller.clear();
   }
 
   @override
   Widget build(BuildContext context) {
-    return (Scaffold(
-      appBar: myAppBar(
-          pagenum: 0,
-          theme: widget.theme,
-          changetheme: widget.changetheme,
-          navigateToStarred: _navigatetostarred),
-      body: ListView.builder(
-          itemCount: todoitems.length,
-          itemBuilder: (context, index) {
-            return ListTile(
-              title: Text(todoitems[index]),
-              leading: IconButton(
-                onPressed: () {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("Tasks"),
+        actions: <Widget>[
+          Opacity(
+            opacity: currentCategoryChip == databaseService.myTasksTable ||
+                    currentCategoryChip == databaseService.starTable
+                ? 0.5
+                : 1.0,
+            child: AbsorbPointer(
+              absorbing: (currentCategoryChip == databaseService.myTasksTable ||
+                  currentCategoryChip == databaseService.starTable),
+              child: IconButton(
+                onPressed: () async {
+                  await databaseService.deleteCategory(currentCategoryChip);
+                  categoryChips.remove(currentCategoryChip);
+                  currentCategoryChip = databaseService.myTasksTable;
+                  currentToDoList = await databaseService
+                      .fetchCurrentToDo(databaseService.myTasksTable);
                   setState(() {
-                    todoitems[index] = "✅";
-                  });
-                  Future.delayed(const Duration(milliseconds: 300), () {
-                    setState(() {
-                      todoitems.removeAt(index);
-                      setTodo(todoitems);
-                    });
+                    categoryChips;
+                    currentCategoryChip;
+                    currentToDoList;
                   });
                 },
-                icon: Icon(
-                  Icons.circle_outlined,
-                  color:
-                      todoitems[index] == "✅" ? const Color(0xFF1E90FF) : null,
-                ),
+                icon: const Icon(Icons.delete),
               ),
-              trailing: IconButton(
-                onPressed: () {
-                  setState(() {
-                    starreditems.add(todoitems[index]);
-                    todoitems.removeAt(index);
-                    setTodo(todoitems);
-                    setStarred(starreditems);
-                  });
-                },
-                icon: const Icon(Icons.star_border),
+            ),
+          )
+        ],
+      ),
+      body: Column(
+        mainAxisAlignment: MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: <Widget>[
+          SizedBox(
+            height: MediaQuery.of(context).size.height * 0.05,
+            child: Flexible(
+              child: CustomScrollView(
+                scrollDirection: Axis.horizontal,
+                slivers: <Widget>[
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 10),
+                      child: IconButton(
+                        onPressed: () async {
+                          if (currentCategoryChip !=
+                              databaseService.starTable) {
+                            currentToDoList = await databaseService
+                                .fetchCurrentToDo(databaseService.starTable);
+                            setState(() {
+                              currentCategoryChip = databaseService.starTable;
+                              currentToDoList;
+                            });
+                          }
+                        },
+                        icon: const Icon(Icons.star),
+                        color: currentCategoryChip == databaseService.starTable
+                            ? const Color(0xFF1E90FF)
+                            : null,
+                      ),
+                    ),
+                  ),
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 10),
+                      child: InkWell(
+                        onTap: () async {
+                          if (currentCategoryChip !=
+                              databaseService.myTasksTable) {
+                            currentToDoList = await databaseService
+                                .fetchCurrentToDo(databaseService.myTasksTable);
+                            setState(() {
+                              currentCategoryChip =
+                                  databaseService.myTasksTable;
+                              currentToDoList;
+                            });
+                          }
+                        },
+                        child: Chip(
+                          side: BorderSide.none,
+                          label: Text(
+                            "My Tasks",
+                            style: currentCategoryChip ==
+                                    databaseService.myTasksTable
+                                ? const TextStyle(color: Color(0xFF1E90FF))
+                                : null,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (BuildContext context, int index) {
+                        return InkWell(
+                          onTap: () async {
+                            if (currentCategoryChip != categoryChips[index]) {
+                              currentCategoryChip = categoryChips[index];
+                              currentToDoList = await databaseService
+                                  .fetchCurrentToDo(currentCategoryChip);
+                              setState(() {
+                                currentCategoryChip;
+                                currentToDoList;
+                              });
+                            }
+                          },
+                          child: Chip(
+                            label: Text(
+                              categoryChips[index],
+                              style: currentCategoryChip == categoryChips[index]
+                                  ? const TextStyle(color: Color(0xFF1E90FF))
+                                  : null,
+                            ),
+                            side: BorderSide.none,
+                          ),
+                        );
+                      },
+                      childCount:
+                          categoryChips.length, // Specify the number of items
+                    ),
+                  ),
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 10),
+                      child: InkWell(
+                        onTap: () async {
+                          alertDialog(context);
+                        },
+                        child: const Chip(
+                          side: BorderSide.none,
+                          label: Icon(Icons.add),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            );
-          }),
-      floatingActionButton: ElevatedButton(
+            ),
+          ),
+          const Divider(
+            thickness: 2,
+          ),
+          Expanded(
+              child: ListView.builder(
+                  physics: const BouncingScrollPhysics(),
+                  itemCount: currentToDoList.length,
+                  itemBuilder: (context, index) {
+                    final note = currentToDoList[index];
+                    return Dismissible(
+                      key: UniqueKey(),
+                      onDismissed: (direction) async {
+                        if (direction == DismissDirection.startToEnd) {
+                          await databaseService.deleteTasks(
+                              currentToDoList[index], currentCategoryChip);
+                          currentToDoList.removeAt(index);
+                        } else if (direction == DismissDirection.endToStart &&
+                            currentCategoryChip != databaseService.starTable) {
+                          await databaseService.starTasks(
+                              currentToDoList[index], currentCategoryChip);
+                          currentToDoList.removeAt(index);
+                        } else if (direction == DismissDirection.endToStart &&
+                            currentCategoryChip == databaseService.starTable) {
+                          await databaseService
+                              .unStarTasks(currentToDoList[index]);
+                          currentToDoList.removeAt(index);
+                        }
+                        setState(() {
+                          currentToDoList;
+                        });
+                      },
+                      background: Container(
+                        color: Colors.redAccent,
+                        child: const Align(
+                            alignment: Alignment.centerLeft,
+                            child: Icon(Icons.delete)),
+                      ),
+                      secondaryBackground: Container(
+                        color: Colors.blueAccent,
+                        child: Align(
+                            alignment: Alignment.centerRight,
+                            child:
+                                currentCategoryChip != databaseService.starTable
+                                    ? const Icon(Icons.star)
+                                    : null),
+                      ),
+                      child: ListTile(
+                        title: Text(note),
+                      ),
+                    );
+                  })),
+          SizedBox(
+            height: MediaQuery.of(context).size.height * 0.05,
+          )
+        ],
+      ),
+      floatingActionButton: FloatingActionButton(
         onPressed: () async {
           await _showModalBottomSheet(context);
         },
-        child: const Icon(
-          Icons.add,
-          color: Color(0xFF1E90FF),
-        ),
+        child: const Icon(Icons.add),
       ),
-    ));
+    );
   }
 }
